@@ -5,6 +5,7 @@
   "type": "module",
   "main": "./index.mjs",
   "exports": "./index.mjs",
+  "scripts": { "test": "node --test test/*.test.mjs" },
   "files": ["index.mjs", "README.md", "LICENSE"],
   "keywords": ["opencode", "opencode-plugin", "magpie", "devin", "windsurf", "multi-account"],
   "license": "MIT",
