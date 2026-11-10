@@ -17,14 +17,18 @@ Once the package is on npm and listed in Magpie's market, `magpie plugin add
 multi-devin` or the Plugins tab does the same.
 
 This plugin and `@magpie-community/opencode-devin-auth` both sign in to the
-`devin` provider. With both installed, Magpie keeps serving `devin` from the
-other one and this plugin's sign-in methods don't show. Keep one of them:
+`devin` provider, and Magpie serves it from one of them. If the other one was
+added later, it serves `devin` and this plugin's sign-in methods don't show
+(`magpie plugin` says which one serves it). Either remove the other one or
+hand the provider over:
 
 ```sh
 magpie plugin rm @magpie-community/opencode-devin-auth
-# or keep both and hand the provider over
+# or keep both
 magpie plugin use multi-devin devin
 ```
+
+The accounts already signed in are kept either way.
 
 ## Add an account
 
