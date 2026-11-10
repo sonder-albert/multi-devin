@@ -1,15 +1,14 @@
 # Devin Multi-Account Auth for OpenCode and Magpie
 
 This plugin adapts Devin's subscription API for OpenCode and Magpie. It keeps
-the Devin request translation and adds the account details Magpie needs to
-keep different Devin seats separate.
+the Devin request translation and supports Magpie's existing separate account
+slots for different Devin sign-ins.
 
 ## Multi-account behavior
 
-- Each successful Devin sign-in carries a stable `accountId` from Devin's
-  organization or team identity.
-- The provider declares unlimited account slots with `maxAccounts: 0`.
-- The API-key method allows another `devin-session-token$...` account to be
+- Each successful Devin sign-in is stored as its own account. Magpie uses
+  Devin's email and, when available, organization name for the account label.
+- The session-token method allows another `devin-session-token$...` account to be
   added without replacing the current account.
 - Magpie can retry a failed account and route the same `devin/swe-2` model
   through another account.
@@ -31,14 +30,8 @@ the `devin` provider.
 ## Add accounts
 
 Use the browser or Devin CLI sign-in method for the first account. Use the
-`Devin session token (another account)` method to add another account when
+`Devin session token` method to add another account when
 the Magpie account panel offers a key form.
-
-For unlimited provider account routing:
-
-```sh
-magpie provider at-once devin 0
-```
 
 The gateway tries another account after a retryable upstream failure. Keep
 only accounts that are entitled to the model being routed.

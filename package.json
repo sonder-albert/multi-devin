@@ -13,7 +13,6 @@
   "bugs": { "url": "https://github.com/sonder-albert/opencode-devin-multi-auth/issues" },
   "homepage": "https://github.com/sonder-albert/opencode-devin-multi-auth",
   "magpie": {
-    "maxAccounts": 0,
     "options": { "cacheKeepaliveInterval": 285, "cacheKeepaliveMaxPings": 6 }
   }
 }
