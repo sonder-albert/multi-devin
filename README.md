@@ -8,9 +8,9 @@ slots for different Devin sign-ins.
 
 - Each successful Devin sign-in is stored as its own account. Magpie uses
   Devin's email and, when available, organization name for the account label.
-- The session-token method allows another `devin-session-token$...` account to be
-  added without replacing the current account.
-- Magpie can retry a failed account and route the same `devin/swe-2` model
+- The session-token method accepts a `devin-session-token$...` token, for
+  example one copied from another machine.
+- magpie can retry a failed account and route the same `devin/swe-2` model
   through another account.
 
 The plugin does not store tokens in its source or configuration defaults.
