@@ -10,10 +10,10 @@ import { createHash, randomBytes, randomUUID } from "node:crypto"
 import { createServer, STATUS_CODES } from "node:http"
 import { gunzipSync, gzipSync } from "node:zlib"
 import { spawn } from "node:child_process"
-import { existsSync, readFileSync, realpathSync, statSync } from "node:fs"
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
-import { isAbsolute, join, relative, resolve } from "node:path"
+import { basename, isAbsolute, join, relative, resolve } from "node:path"
 
 const ID = "devin"
 const CHAT = "@ai-sdk/openai-compatible"
@@ -34,7 +34,8 @@ const CLI_VERSION = "3000.11.3"
 // the AI SDK is given a chat completions URL; the loader's fetch answers
 // every request itself, so nothing is ever sent here
 const BASE = SERVER + "/devin/v1"
-const SIGN_IN_TIMEOUT = 10 * 60 * 1000
+const SIGN_IN_TIMEOUT = 30 * 60 * 1000
+const BROWSER_LABEL = "Devin (browser, incognito)"
 // how long the CLI's model list is kept, and how long a failed read waits
 const FRESH = 5 * 60 * 1000
 const RETRY = 60 * 1000
@@ -947,6 +948,114 @@ async function success(key, server) {
   return { type: "success", provider: ID, key, metadata }
 }
 
+function macBrowser() {
+  const requested = String(process.env.MAGPIE_DEVIN_BROWSER ?? "").trim()
+  if (requested) return requested
+  const candidates = [
+    "/Applications/Google Chrome.app",
+    join(homedir(), "Applications", "Google Chrome.app"),
+    "/Applications/Chromium.app",
+    join(homedir(), "Applications", "Chromium.app"),
+    "/Applications/Microsoft Edge.app",
+    join(homedir(), "Applications", "Microsoft Edge.app"),
+  ]
+  return candidates.find((path) => existsSync(path))
+}
+
+function unixBrowser() {
+  const requested = String(process.env.MAGPIE_DEVIN_BROWSER ?? "").trim()
+  if (requested) return requested
+  return ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "microsoft-edge"].find((name) => {
+    try {
+      return existsSync(`/usr/bin/${name}`) || existsSync(`/usr/local/bin/${name}`) || existsSync(`/opt/homebrew/bin/${name}`)
+    } catch {
+      return false
+    }
+  })
+}
+
+function windowsBrowser() {
+  const requested = String(process.env.MAGPIE_DEVIN_BROWSER ?? "").trim()
+  if (requested) return requested
+  const roots = [process.env.LOCALAPPDATA, process.env.PROGRAMFILES, process.env["PROGRAMFILES(X86)"]].filter(Boolean)
+  const names = [
+    ["Google", "Chrome", "Application", "chrome.exe"],
+    ["Chromium", "Application", "chrome.exe"],
+    ["Microsoft", "Edge", "Application", "msedge.exe"],
+  ]
+  return roots.flatMap((root) => names.map((parts) => join(root, ...parts))).find((path) => existsSync(path))
+}
+
+// browserKind names the browser a path points at, for the flags and the
+// profile folder that differ between them.
+function browserKind(browser) {
+  const name = String(browser ?? "").toLowerCase()
+  if (/edge/.test(name)) return "edge"
+  if (/chromium/.test(name)) return "chromium"
+  if (/chrome/.test(name)) return "chrome"
+  return "other"
+}
+
+// browserProfileDirectory is the profile the browser was last used with, so
+// the private window offers that profile's saved passwords.
+function browserProfileDirectory(browser) {
+  if (process.platform !== "darwin") return ""
+  const folders = { chrome: ["Google", "Chrome"], chromium: ["Chromium"], edge: ["Microsoft Edge"] }
+  const folder = folders[browserKind(browser)]
+  if (!folder) return ""
+  const path = join(homedir(), "Library", "Application Support", ...folder, "Local State")
+  try {
+    const state = JSON.parse(readFileSync(path, "utf8"))
+    return String(state?.profile?.last_used ?? "").trim()
+  } catch {
+    return ""
+  }
+}
+
+// browserExecutable is the program to run for a browser path. A macOS .app
+// is run through the binary inside it: `open -a` only brings a browser that
+// is already running to the front and drops what follows --args, so the
+// private window would never open.
+function browserExecutable(browser, platform = process.platform) {
+  const path = String(browser ?? "").replace(/\/+$/, "")
+  if (platform !== "darwin" || !path.endsWith(".app")) return path
+  const folder = join(path, "Contents", "MacOS")
+  const named = join(folder, basename(path, ".app"))
+  if (existsSync(named)) return named
+  try {
+    const first = readdirSync(folder).find((name) => !name.startsWith("."))
+    if (first) return join(folder, first)
+  } catch {}
+  return named
+}
+
+// browserLaunch is the command that opens url in a private window of browser.
+function browserLaunch(browser, url, { platform = process.platform, profile = "" } = {}) {
+  const args = [browserKind(browser) === "edge" ? "--inprivate" : "--incognito", "--no-first-run", "--no-default-browser-check"]
+  if (profile) args.push(`--profile-directory=${profile}`)
+  args.push(url)
+  return { command: browserExecutable(browser, platform), args }
+}
+
+async function openPrivateBrowser(url) {
+  const browser =
+    process.platform === "darwin" ? macBrowser() : process.platform === "win32" ? windowsBrowser() : unixBrowser()
+  if (!browser) throw new Error("Magpie couldn't find Google Chrome, Chromium, or Edge to open a Devin login window")
+  const { command, args } = browserLaunch(browser, url, { profile: browserProfileDirectory(browser) })
+  try {
+    await new Promise((resolve, reject) => {
+      const child = spawn(command, args, { detached: true, stdio: "ignore" })
+      child.once("spawn", () => {
+        child.unref()
+        resolve()
+      })
+      child.once("error", reject)
+    })
+  } catch (e) {
+    throw new Error(`Magpie couldn't open the Devin login window: ${e.message}`)
+  }
+}
+
 // browserSignIn is `devin auth login`'s round, run by the plugin: PKCE
 // through app.devin.ai, back to a callback on 127.0.0.1.
 async function browserSignIn() {
@@ -1005,9 +1114,16 @@ async function browserSignIn() {
     code_challenge_method: "S256",
     cli_pkce_marker: "1",
   })
+  const url = `${AUTHORIZE}?${q}`
+  try {
+    await openPrivateBrowser(url)
+  } catch (e) {
+    finish({ type: "failed", error: e.message })
+    throw e
+  }
   return {
-    url: `${AUTHORIZE}?${q}`,
-    instructions: "Sign in to Devin in the browser.",
+    url: "",
+    instructions: "A private browser window was opened for the Devin sign-in. Saved passwords autofill there, and the Devin account in your normal browser is left alone. Close the window when you are done.",
     method: "auto",
     callback: () => done,
   }
@@ -2830,7 +2946,7 @@ async function v2Setup(ctx) {
   await ctx.integration.transform((editor) => {
     editor.method.update({
       integrationID: ID,
-      method: { id: "browser", type: "oauth", label: "Devin (browser, sign in another account)" },
+      method: { id: "browser", type: "oauth", label: BROWSER_LABEL },
       async authorize() {
         const a = await browserSignIn()
         return {
@@ -3143,7 +3259,7 @@ export async function DevinAuthPlugin({ client, magpie } = {}, options = {}) {
         }
       },
       methods: [
-        { type: "oauth", label: "Devin (browser, sign in another account)", authorize: browserSignIn },
+        { type: "oauth", label: BROWSER_LABEL, authorize: browserSignIn },
         { type: "oauth", label: "Devin CLI's sign-in", authorize: cliSignIn },
         {
           type: "api",
@@ -3251,4 +3367,4 @@ export async function DevinAuthPlugin({ client, magpie } = {}, options = {}) {
 }
 
 // for tests
-export const _internal = { sigTypeOf, forgetSigTypes: () => sigTypes.clear(), keepaliveKey, keepaliveSettings, keepalivePing, scheduleKeepalive, stopKeepalive, stopAllKeepalive, keeping: () => [...keeps.keys()], useTimers: (t) => (timers = t ?? realTimers), KEEPALIVE, buildMessages, completeMessages, anthropicEffort, encodeMsg, parseFree, parsePrices, geminiSchema, freeIDs, outID, inID, objectRoot, seesImages, imagesFor, forgetSaid: () => said.clear(), parseModelConfigs, parseConfigFamilies, SNAPSHOT_IMAGES, withImages, forgetImages: () => (seen = null), effortOf, runtimeModel, configModel, live, build, failure, complete, parseFamilies, listed, variantFor, familiesOf, SNAPSHOT, parseStatus, readsHome, tierName, whoOfStatus, whoByKey, success, familiesFor, readCredentials, credentials, fields, frame, PB, events, frames, v2Chat, v2ToolParts, v2FileData, v2Effort, v2ResponseFormat, v2Usage, v2Auth, v2Credential, v2Models, devinLanguage, v2Setup, connKey }
+export const _internal = { sigTypeOf, forgetSigTypes: () => sigTypes.clear(), keepaliveKey, keepaliveSettings, keepalivePing, scheduleKeepalive, stopKeepalive, stopAllKeepalive, keeping: () => [...keeps.keys()], useTimers: (t) => (timers = t ?? realTimers), KEEPALIVE, buildMessages, completeMessages, anthropicEffort, encodeMsg, parseFree, parsePrices, geminiSchema, freeIDs, outID, inID, objectRoot, seesImages, imagesFor, forgetSaid: () => said.clear(), parseModelConfigs, parseConfigFamilies, SNAPSHOT_IMAGES, withImages, forgetImages: () => (seen = null), effortOf, runtimeModel, configModel, live, build, failure, complete, parseFamilies, listed, variantFor, familiesOf, SNAPSHOT, parseStatus, readsHome, tierName, whoOfStatus, whoByKey, success, familiesFor, readCredentials, credentials, fields, frame, PB, events, frames, v2Chat, v2ToolParts, v2FileData, v2Effort, v2ResponseFormat, v2Usage, v2Auth, v2Credential, v2Models, devinLanguage, v2Setup, connKey, macBrowser, unixBrowser, browserKind, browserExecutable, browserLaunch, BROWSER_LABEL }

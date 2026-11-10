@@ -1,7 +1,7 @@
 {
-  "name": "opencode-devin-multi-auth",
-  "version": "0.1.0",
-  "description": "Devin subscriptions with multiple account slots and Magpie routing for OpenCode and Codex",
+  "name": "multi-devin",
+  "version": "0.2.0",
+  "description": "Several Devin accounts behind one devin provider for Magpie and OpenCode, each added from a private browser window",
   "type": "module",
   "main": "./index.mjs",
   "exports": "./index.mjs",
@@ -9,9 +9,9 @@
   "files": ["index.mjs", "README.md", "LICENSE"],
   "keywords": ["opencode", "opencode-plugin", "magpie", "devin", "windsurf", "multi-account"],
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/sonder-albert/opencode-devin-multi-auth.git" },
-  "bugs": { "url": "https://github.com/sonder-albert/opencode-devin-multi-auth/issues" },
-  "homepage": "https://github.com/sonder-albert/opencode-devin-multi-auth",
+  "repository": { "type": "git", "url": "git+https://github.com/sonder-albert/multi-devin.git" },
+  "bugs": { "url": "https://github.com/sonder-albert/multi-devin/issues" },
+  "homepage": "https://github.com/sonder-albert/multi-devin",
   "magpie": {
     "options": { "cacheKeepaliveInterval": 285, "cacheKeepaliveMaxPings": 6 }
   }

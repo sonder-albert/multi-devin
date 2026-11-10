@@ -1,61 +1,94 @@
-# Devin Multi-Account Auth for OpenCode and Magpie
+# multi-devin
 
-This plugin adapts Devin's subscription API for OpenCode and Magpie. It keeps
-the Devin request translation and supports Magpie's existing separate account
-slots for different Devin sign-ins.
+Several Devin accounts behind one `devin` provider, for Magpie and OpenCode.
+Each account is added from a private browser window, so the Devin account
+your normal browser is signed in to never gets in the way.
 
-## Multi-account behavior
-
-- Each successful Devin sign-in is stored as its own account. Magpie uses
-  Devin's email and, when available, organization name for the account label.
-- The session-token method accepts a `devin-session-token$...` token, for
-  example one copied from another machine.
-- magpie can retry a failed account and route the same `devin/swe-2` model
-  through another account.
-
-The plugin does not store tokens in its source or configuration defaults.
-Magpie owns credential storage.
+多个 Devin 账号共用一个 `devin` 渠道。每次添加账号都在浏览器无痕窗口里登录，
+不会被日常浏览器里已登录的 Devin 账号顶替；Magpie 里不用填邮箱和密码。
 
 ## Install
 
-Install the public repository through Magpie:
-
 ```sh
-magpie plugin add github:sonder-albert/opencode-devin-multi-auth
+magpie plugin add github:sonder-albert/multi-devin
 ```
 
-Disable the upstream Devin plugin before enabling this one if both provide
-the `devin` provider.
+Once the package is on npm and listed in Magpie's market, `magpie plugin add
+multi-devin` or the Plugins tab does the same.
 
-## Add accounts
+This plugin and `@magpie-community/opencode-devin-auth` both sign in to the
+`devin` provider. With both installed, Magpie keeps serving `devin` from the
+other one and this plugin's sign-in methods don't show. Keep one of them:
 
-Use the browser method to sign in to another Devin account. It opens a fresh
-login instead of silently reusing the current browser session. Use the
-`Devin session token` method only when you already have a token from another
-machine.
-the Magpie account panel offers a key form.
+```sh
+magpie plugin rm @magpie-community/opencode-devin-auth
+# or keep both and hand the provider over
+magpie plugin use multi-devin devin
+```
 
-The gateway tries another account after a retryable upstream failure. Keep
+## Add an account
+
+In Magpie, open the Devin provider and choose **Devin (browser, incognito)**.
+
+1. A private window of your browser opens on Devin's sign-in page.
+2. Sign in. The browser's saved passwords autofill as usual.
+3. The window says "You're signed in" and the account appears in Magpie.
+4. Close the private window, then repeat for the next account.
+
+Close the window between accounts: private windows that are open at the same
+time share one session, so a window left open still carries the previous
+account.
+
+Google Chrome, Chromium and Microsoft Edge are found on their own, in that
+order. Set `MAGPIE_DEVIN_BROWSER` to another Chromium-based browser's path to
+use it instead. Autofill comes from the browser's own password manager; the
+macOS Passwords app is not available to Chrome.
+
+Two more methods are there for the cases a browser can't cover:
+
+- **Devin CLI's sign-in** takes the account `devin auth login` signed in to.
+- **Devin session token** takes a pasted `devin-session-token$…`, for example
+  one copied from another machine.
+
+## How it differs from the Devin plugin already listed
+
+`@magpie-community/opencode-devin-auth` is the listed plugin for this channel.
+multi-devin uses its request translation unchanged and differs in sign-in:
+
+| | opencode-devin-auth | multi-devin |
+|---|---|---|
+| Browser sign-in | your default browser, with the session it already has | a private window the plugin opens itself |
+| When the browser is already signed in to Devin | that account is signed in again | the private window starts signed out, so another account can be added |
+| Sign-in time limit | 10 minutes | 30 minutes |
+| Session token method | no | yes |
+
+What they share: the `devin` provider id, the model ids (`devin/swe-2` and the
+rest), the endpoint, and each account's own Devin quota. Adding an account to
+both does not give it more quota.
+
+## Routing
+
+Each sign-in is kept as its own account, labelled with its email and
+organization. Magpie uses the accounts in order and moves to the next one
+when the one in front is out of quota or fails with a retryable error. Keep
 only accounts that are entitled to the model being routed.
 
-## Codex
-
-Point Codex at Magpie and select the shared Devin model:
+For Codex:
 
 ```toml
 model = "devin/swe-2"
 openai_base_url = "http://127.0.0.1:3425/backend-api/codex"
 ```
 
-Magpie's trace endpoint verifies account order and retries:
+`curl -sS http://127.0.0.1:3425/v1/magpie/trace` shows which provider and
+account served each request.
 
-```sh
-curl -sS http://127.0.0.1:3425/v1/magpie/trace
-```
+## Credentials
 
-## Scope
+The plugin keeps no token in its source or defaults. Magpie stores the
+credentials; the plugin never sees a password.
 
-The request translation is based on
-`@magpie-community/opencode-devin-auth`. The multi-account changes stay
-small so they can be proposed upstream after validation against the current
-Magpie plugin host.
+## License
+
+MIT. The request translation comes from
+`@magpie-community/opencode-devin-auth`.
