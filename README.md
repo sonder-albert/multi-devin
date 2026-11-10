@@ -29,8 +29,10 @@ the `devin` provider.
 
 ## Add accounts
 
-Use the browser or Devin CLI sign-in method for the first account. Use the
-`Devin session token` method to add another account when
+Use the browser method to sign in to another Devin account. It opens a fresh
+login instead of silently reusing the current browser session. Use the
+`Devin session token` method only when you already have a token from another
+machine.
 the Magpie account panel offers a key form.
 
 The gateway tries another account after a retryable upstream failure. Keep
