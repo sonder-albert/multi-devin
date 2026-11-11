@@ -24,6 +24,12 @@ test("browser sign-in has one name everywhere", async () => {
   assert.equal(source.match(/label: BROWSER_LABEL/g).length, 2)
 })
 
+test("browser sign-in asks Devin to show the account chooser", async () => {
+  const source = await readFile(new URL("../index.mjs", import.meta.url), "utf8")
+  assert.match(source, /prompt: "select_account"/)
+  assert.doesNotMatch(source, /prompt: "login"/)
+})
+
 test("a macOS browser is run through its own binary, not `open -a`", () => {
   const launch = _internal.browserLaunch("/Applications/Google Chrome.app", "https://example.test/x", {
     platform: "darwin",

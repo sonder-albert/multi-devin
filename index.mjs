@@ -1109,7 +1109,7 @@ async function browserSignIn() {
   const q = new URLSearchParams({
     redirect_uri: redirect,
     state,
-    prompt: "login",
+    prompt: "select_account",
     code_challenge: challenge,
     code_challenge_method: "S256",
     cli_pkce_marker: "1",
